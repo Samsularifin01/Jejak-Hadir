@@ -16,6 +16,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final HistoryController _controller = HistoryController();
   List<AttendanceModel> histories = [];
   bool isLoading = true;
+  int? currentUserId;
 
   @override
   void initState() {
@@ -30,6 +31,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (!mounted) return;
 
       setState(() {
+        currentUserId = null;
         histories = [];
         isLoading = false;
       });
@@ -41,9 +43,389 @@ class _HistoryScreenState extends State<HistoryScreen> {
     if (!mounted) return;
 
     setState(() {
+      currentUserId = userId;
       histories = result;
       isLoading = false;
     });
+  }
+
+  Future<void> _showAttendanceFormDialog([AttendanceModel? attendance]) async {
+    final isEditing = attendance != null;
+    final userId = currentUserId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("User ID tidak ditemukan. Silakan login kembali.")),
+      );
+      return;
+    }
+
+    DateTime selectedDate = isEditing
+        ? DateTime.parse(attendance.checkIn)
+        : DateTime.now();
+    
+    TimeOfDay selectedCheckInTime = isEditing
+        ? TimeOfDay.fromDateTime(DateTime.parse(attendance.checkIn))
+        : TimeOfDay.now();
+
+    bool hasCheckOut = isEditing && attendance.checkOut != null;
+    TimeOfDay selectedCheckOutTime = isEditing && attendance.checkOut != null
+        ? TimeOfDay.fromDateTime(DateTime.parse(attendance.checkOut!))
+        : const TimeOfDay(hour: 17, minute: 0);
+
+    String status = isEditing ? attendance.status : 'Hadir';
+    final addressController = TextEditingController(
+      text: isEditing ? attendance.address : 'Presensi Manual (Input)',
+    );
+
+    final statusOptions = ['Hadir', 'Terlambat', 'Selesai', 'Izin', 'Sakit', 'Alpa'];
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                isEditing ? "Edit Presensi" : "Tambah Presensi",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Tanggal Presensi",
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: dialogCtx,
+                          initialDate: selectedDate,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(DateFormat('dd MMMM yyyy').format(selectedDate)),
+                            const Icon(Icons.calendar_month, color: Colors.blueAccent),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text(
+                      "Jam Masuk (Check In)",
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: dialogCtx,
+                          initialTime: selectedCheckInTime,
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            selectedCheckInTime = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey[300]!),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(selectedCheckInTime.format(dialogCtx)),
+                            const Icon(Icons.access_time_rounded, color: Colors.green),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Sudah Check Out?",
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                        Switch(
+                          value: hasCheckOut,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              hasCheckOut = val;
+                              if (val && (status == 'Hadir' || status == 'Terlambat')) {
+                                status = 'Selesai';
+                              } else if (!val && status == 'Selesai') {
+                                status = 'Hadir';
+                              }
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
+                    if (hasCheckOut) ...[
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showTimePicker(
+                            context: dialogCtx,
+                            initialTime: selectedCheckOutTime,
+                          );
+                          if (picked != null) {
+                            setDialogState(() {
+                              selectedCheckOutTime = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey[300]!),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(selectedCheckOutTime.format(dialogCtx)),
+                              const Icon(Icons.access_time_rounded, color: Colors.red),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+
+                    const Text(
+                      "Status Presensi",
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: status,
+                          isExpanded: true,
+                          items: statusOptions.map((String opt) {
+                            return DropdownMenuItem<String>(
+                              value: opt,
+                              child: Text(opt),
+                            );
+                          }).toList(),
+                          onChanged: (newVal) {
+                            if (newVal != null) {
+                              setDialogState(() {
+                                status = newVal;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text(
+                      "Detail Lokasi / Alamat",
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: addressController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: "Masukkan lokasi presensi...",
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    if (addressController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                        const SnackBar(content: Text("Alamat tidak boleh kosong")),
+                      );
+                      return;
+                    }
+
+                    final dtIn = DateTime(
+                      selectedDate.year,
+                      selectedDate.month,
+                      selectedDate.day,
+                      selectedCheckInTime.hour,
+                      selectedCheckInTime.minute,
+                    );
+                    final checkInStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(dtIn);
+
+                    String? checkOutStr;
+                    if (hasCheckOut) {
+                      final dtOut = DateTime(
+                        selectedDate.year,
+                        selectedDate.month,
+                        selectedDate.day,
+                        selectedCheckOutTime.hour,
+                        selectedCheckOutTime.minute,
+                      );
+                      
+                      if (dtOut.isBefore(dtIn)) {
+                        ScaffoldMessenger.of(dialogCtx).showSnackBar(
+                          const SnackBar(content: Text("Jam keluar harus setelah jam masuk")),
+                        );
+                        return;
+                      }
+                      checkOutStr = DateFormat('yyyy-MM-dd HH:mm:ss').format(dtOut);
+                    }
+
+                    final newAttendance = AttendanceModel(
+                      id: isEditing ? attendance.id : null,
+                      userId: userId,
+                      checkIn: checkInStr,
+                      checkOut: checkOutStr,
+                      latitude: isEditing ? attendance.latitude : 0.0,
+                      longitude: isEditing ? attendance.longitude : 0.0,
+                      address: addressController.text.trim(),
+                      status: status,
+                      createdAt: isEditing ? attendance.createdAt : DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now()),
+                    );
+
+                    Navigator.pop(dialogCtx);
+
+                    try {
+                      if (isEditing) {
+                        await _controller.updateAttendance(newAttendance);
+                      } else {
+                        await _controller.addAttendance(newAttendance);
+                      }
+                      
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isEditing
+                              ? "Presensi berhasil diperbarui"
+                              : "Presensi berhasil ditambahkan"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                      loadHistory();
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Terjadi kesalahan: $e"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: const Text("Simpan", style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmDelete(int attendanceId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            "Hapus Presensi",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: const Text(
+            "Apakah Anda yakin ingin menghapus data presensi ini? Tindakan ini tidak dapat dibatalkan.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text("Hapus", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      try {
+        await _controller.deleteAttendance(attendanceId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Presensi berhasil dihapus"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        loadHistory();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal menghapus presensi: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   String _getDayNum(String dateStr) {
@@ -396,6 +778,37 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               ],
                             ),
                           ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.blueAccent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                onPressed: () => _showAttendanceFormDialog(item),
+                                icon: const Icon(Icons.edit_outlined, size: 16),
+                                label: const Text(
+                                  "Edit",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              TextButton.icon(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                onPressed: () => _confirmDelete(item.id!),
+                                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                                label: const Text(
+                                  "Hapus",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -428,6 +841,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
           : histories.isEmpty
               ? _buildEmptyState()
               : _buildHistoryList(),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.blue[800],
+        onPressed: () => _showAttendanceFormDialog(),
+        icon: const Icon(Icons.edit_calendar_rounded, color: Colors.white),
+        label: const Text(
+          "Tambah Presensi",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 }

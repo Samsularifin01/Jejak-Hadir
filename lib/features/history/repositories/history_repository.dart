@@ -22,4 +22,39 @@ class HistoryRepository {
         )
         .toList();
   }
+
+  Future<int> insertAttendance(
+      AttendanceModel attendance) async {
+    final Database db =
+        await DatabaseHelper.database;
+
+    return await db.insert(
+      'attendances',
+      attendance.toMap(),
+    );
+  }
+
+  Future<int> updateAttendance(
+      AttendanceModel attendance) async {
+    final Database db =
+        await DatabaseHelper.database;
+
+    return await db.update(
+      'attendances',
+      attendance.toMap(),
+      where: 'id = ?',
+      whereArgs: [attendance.id],
+    );
+  }
+
+  Future<int> deleteAttendance(int id) async {
+    final Database db =
+        await DatabaseHelper.database;
+
+    return await db.delete(
+      'attendances',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 }
